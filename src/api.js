@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: 'http://localhost:5000/api',
+ baseURL: 'https://portfolio-backend-74pl.onrender.com/api',
 });
 
 // Admin routes ke liye token automatic bhejne ka setup
