@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import { 
   Trash2, Mail, Briefcase, Award, User, LogOut, 
-  Image as ImageIcon, PlusCircle, LayoutDashboard, ExternalLink, FileText 
+  Image as ImageIcon, PlusCircle, LayoutDashboard, ExternalLink, FileText, Edit2, XCircle
 } from 'lucide-react';
 
 export default function Admin() {
@@ -18,9 +18,13 @@ export default function Admin() {
   });
   const [skillForm, setSkillForm] = useState({ name: '', category: 'Frontend' });
   
+  // Edit State
+  const [editProjectId, setEditProjectId] = useState(null);
+  const [editSkillId, setEditSkillId] = useState(null);
+
   const [uploadingProjectImg, setUploadingProjectImg] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [uploadingResume, setUploadingResume] = useState(false); // <-- Resume upload state
+  const [uploadingResume, setUploadingResume] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   
   const navigate = useNavigate();
@@ -54,7 +58,7 @@ export default function Admin() {
   const handleFileUpload = async (file, type) => {
     if (!file) return;
     const formData = new FormData();
-    formData.append('image', file); // Multer expects 'image' key, works for PDFs too
+    formData.append('image', file);
 
     if (type === 'project') setUploadingProjectImg(true);
     if (type === 'avatar') setUploadingAvatar(true);
@@ -78,7 +82,6 @@ export default function Admin() {
       setTimeout(() => setStatusMsg(''), 3000);
     } catch (err) {
       alert('Failed to upload file to Cloudinary');
-      console.error(err);
     } finally {
       if (type === 'project') setUploadingProjectImg(false);
       if (type === 'avatar') setUploadingAvatar(false);
@@ -97,32 +100,73 @@ export default function Admin() {
     }
   };
 
-  const handleAddProject = async (e) => {
+  // ----- PROJECT SUBMIT (Create & Update) -----
+  const handleProjectSubmit = async (e) => {
     e.preventDefault();
     try {
       const payload = { 
         ...projectForm, 
-        technologies: projectForm.technologies ? projectForm.technologies.split(',').map(t => t.trim()) : [] 
+        technologies: typeof projectForm.technologies === 'string' 
+          ? projectForm.technologies.split(',').map(t => t.trim()) 
+          : projectForm.technologies 
       };
-      await API.post('/projects', payload);
+      
+      if (editProjectId) {
+        await API.put(`/projects/${editProjectId}`, payload);
+        setStatusMsg('Project Updated Successfully!');
+      } else {
+        await API.post('/projects', payload);
+        setStatusMsg('Project Added Successfully!');
+      }
+      
       setProjectForm({ title: '', description: '', technologies: '', imageUrl: '', githubUrl: '', liveUrl: '' });
+      setEditProjectId(null);
       fetchData();
-      setStatusMsg('Project Added Successfully!');
       setTimeout(() => setStatusMsg(''), 3000);
     } catch (err) {
-      alert('Failed to create project');
+      alert('Failed to save project');
     }
   };
 
-  const handleAddSkill = async (e) => {
+  const startEditProject = (proj) => {
+    setEditProjectId(proj._id);
+    setProjectForm({
+      title: proj.title,
+      description: proj.description,
+      technologies: proj.technologies.join(', '),
+      imageUrl: proj.imageUrl || '',
+      githubUrl: proj.githubUrl || '',
+      liveUrl: proj.liveUrl || ''
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ----- SKILL SUBMIT (Create & Update) -----
+  const handleSkillSubmit = async (e) => {
     e.preventDefault();
     try {
-      await API.post('/skills', skillForm);
+      if (editSkillId) {
+        await API.put(`/skills/${editSkillId}`, skillForm);
+        setStatusMsg('Skill Updated Successfully!');
+      } else {
+        await API.post('/skills', skillForm);
+        setStatusMsg('Skill Added Successfully!');
+      }
       setSkillForm({ name: '', category: 'Frontend' });
+      setEditSkillId(null);
       fetchData();
+      setTimeout(() => setStatusMsg(''), 3000);
     } catch (err) {
-      alert('Failed to add skill');
+      alert('Failed to save skill');
     }
+  };
+
+  const startEditSkill = (skill) => {
+    setEditSkillId(skill._id);
+    setSkillForm({
+      name: skill.name,
+      category: skill.category
+    });
   };
 
   const deleteItem = async (endpoint, id) => {
@@ -216,8 +260,19 @@ export default function Admin() {
         {/* PROJECTS TAB */}
         {activeTab === 'projects' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <form onSubmit={handleAddProject} className="lg:col-span-1 p-6 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4 h-fit">
-              <h3 className="font-bold text-white flex items-center gap-2 text-base"><PlusCircle size={18} className="text-indigo-400" /> New Project</h3>
+            <form onSubmit={handleProjectSubmit} className="lg:col-span-1 p-6 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4 h-fit transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-white flex items-center gap-2 text-base">
+                  <PlusCircle size={18} className="text-indigo-400" /> 
+                  {editProjectId ? 'Edit Project' : 'New Project'}
+                </h3>
+                {editProjectId && (
+                  <button type="button" onClick={() => { setEditProjectId(null); setProjectForm({ title: '', description: '', technologies: '', imageUrl: '', githubUrl: '', liveUrl: '' }); }} className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                    <XCircle size={14}/> Cancel
+                  </button>
+                )}
+              </div>
+
               <input required placeholder="Project Name" className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none" value={projectForm.title} onChange={e => setProjectForm({...projectForm, title: e.target.value})} />
               
               <div>
@@ -231,13 +286,16 @@ export default function Admin() {
               <input placeholder="GitHub URL" className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none" value={projectForm.githubUrl} onChange={e => setProjectForm({...projectForm, githubUrl: e.target.value})} />
               <input placeholder="Live Link" className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none" value={projectForm.liveUrl} onChange={e => setProjectForm({...projectForm, liveUrl: e.target.value})} />
               <textarea required rows="3" placeholder="Description" className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none resize-none" value={projectForm.description} onChange={e => setProjectForm({...projectForm, description: e.target.value})} />
-              <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm">Publish Project</button>
+              
+              <button type="submit" className={`w-full py-3 text-white font-semibold rounded-xl text-sm transition ${editProjectId ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}>
+                {editProjectId ? 'Update Project' : 'Publish Project'}
+              </button>
             </form>
 
             <div className="lg:col-span-2 space-y-3">
               <h3 className="font-bold text-white text-base">Existing Projects</h3>
               {projects.map(p => (
-                <div key={p._id} className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex items-center justify-between gap-4">
+                <div key={p._id} className={`p-4 bg-slate-900/60 border rounded-2xl flex items-center justify-between gap-4 transition ${editProjectId === p._id ? 'border-indigo-500/50 bg-slate-800/80' : 'border-slate-800'}`}>
                   <div className="flex items-center gap-4">
                     {p.imageUrl ? <img src={p.imageUrl} className="w-16 h-16 object-cover rounded-xl" /> : <div className="w-16 h-16 bg-slate-950 rounded-xl flex items-center justify-center"><ImageIcon size={24}/></div>}
                     <div>
@@ -245,7 +303,10 @@ export default function Admin() {
                       <p className="text-xs text-slate-400 line-clamp-1">{p.description}</p>
                     </div>
                   </div>
-                  <button onClick={() => deleteItem('projects', p._id)} className="text-slate-500 hover:text-rose-400 p-2"><Trash2 size={16} /></button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => startEditProject(p)} className="text-slate-500 hover:text-indigo-400 p-2"><Edit2 size={16} /></button>
+                    <button onClick={() => deleteItem('projects', p._id)} className="text-slate-500 hover:text-rose-400 p-2"><Trash2 size={16} /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -255,25 +316,38 @@ export default function Admin() {
         {/* SKILLS TAB */}
         {activeTab === 'skills' && (
           <div className="space-y-6">
-            <form onSubmit={handleAddSkill} className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col sm:flex-row gap-3">
-              <input required placeholder="Skill Name" className="flex-1 p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none" value={skillForm.name} onChange={e => setSkillForm({...skillForm, name: e.target.value})} />
-              <select className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none" value={skillForm.category} onChange={e => setSkillForm({...skillForm, category: e.target.value})}>
+            <form onSubmit={handleSkillSubmit} className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col sm:flex-row gap-3 items-center">
+              <input required placeholder="Skill Name" className="flex-1 w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none" value={skillForm.name} onChange={e => setSkillForm({...skillForm, name: e.target.value})} />
+              <select className="p-3 w-full sm:w-auto bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none" value={skillForm.category} onChange={e => setSkillForm({...skillForm, category: e.target.value})}>
                 <option>Frontend</option><option>Backend</option><option>Database</option><option>Tools</option>
               </select>
-              <button type="submit" className="px-6 py-3 bg-indigo-600 rounded-xl text-sm font-semibold">Add Skill</button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button type="submit" className={`px-6 py-3 w-full rounded-xl text-sm font-semibold transition ${editSkillId ? 'bg-emerald-600' : 'bg-indigo-600'}`}>
+                  {editSkillId ? 'Update Skill' : 'Add Skill'}
+                </button>
+                {editSkillId && (
+                  <button type="button" onClick={() => { setEditSkillId(null); setSkillForm({ name: '', category: 'Frontend' }); }} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300">
+                    <XCircle size={18} />
+                  </button>
+                )}
+              </div>
             </form>
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {skills.map(s => (
-                <div key={s._id} className="p-3.5 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between">
+                <div key={s._id} className={`p-3.5 bg-slate-900/60 border rounded-xl flex items-center justify-between transition ${editSkillId === s._id ? 'border-indigo-500/50' : 'border-slate-800'}`}>
                   <div><div className="font-semibold text-white text-sm">{s.name}</div><div className="text-[10px] text-indigo-400 uppercase">{s.category}</div></div>
-                  <button onClick={() => deleteItem('skills', s._id)} className="text-slate-500 hover:text-rose-400 p-1"><Trash2 size={15} /></button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => startEditSkill(s)} className="text-slate-500 hover:text-indigo-400 p-1"><Edit2 size={15} /></button>
+                    <button onClick={() => deleteItem('skills', s._id)} className="text-slate-500 hover:text-rose-400 p-1"><Trash2 size={15} /></button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* PROFILE TAB (AVATAR & RESUME) */}
+        {/* PROFILE TAB */}
         {activeTab === 'profile' && (
           <form onSubmit={handleUpdateProfile} className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
@@ -292,7 +366,6 @@ export default function Admin() {
               {profile.avatar && <div className="mt-2 text-xs text-emerald-400 border border-slate-800 p-2 rounded-xl truncate">Avatar Uploaded</div>}
             </div>
 
-            {/* NEW: Resume Upload */}
             <div className="sm:col-span-2">
               <label className="text-xs text-slate-400 uppercase font-semibold">Resume / CV (PDF/DOC)</label>
               <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => handleFileUpload(e.target.files[0], 'resume')} className="w-full mt-1 text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-rose-600/20 file:text-rose-400 cursor-pointer" />
